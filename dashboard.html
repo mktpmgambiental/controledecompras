@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Análises v10.0 - Final</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --bg: #0b1120; --card-bg: #172136; --border: #2a3a5a; --text: #e2e8f0; --text-secondary: #94a3b8; 
+            --primary: #22c55e; --primary-hover: #16a34a; --accent: #38bdf8; --danger: #ef4444; 
+            --input-bg: var(--border);
+        }
+        html.light {
+            --bg: #f1f5f9; --card-bg: #ffffff; --border: #e2e8f0; --text: #0f172a; --text-secondary: #64748b;
+            --input-bg: #f8fafc;
+        }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: var(--border); }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: #5a6a82; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); transition: background-color 0.3s, color 0.3s; }
+        .card { background-color: var(--card-bg); border: 1px solid var(--border); }
+        .form-input { background-color: var(--input-bg); border: 1px solid var(--border); color: var(--text); }
+        .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3); outline: none; }
+        .btn { padding: 0.65rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; border: none; }
+        .btn-primary { background-color: var(--primary); color: white; box-shadow: 0 4px 14px 0 rgba(34, 197, 94, 0.25); } 
+        .btn-primary:hover { background-color: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 6px 16px 0 rgba(34, 197, 94, 0.3); }
+        .btn-secondary { background-color: var(--border); color: var(--text); } 
+        .btn-secondary:hover { background-color: #475569; }
+        html.light .btn-secondary:hover { background-color: #cbd5e1; }
+        .kpi-card { text-align: center; }
+        .analysis-title { font-size: 1.25rem; font-weight: 600; color: var(--accent); margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.75rem;}
+        .accounting-cell { display: flex; justify-content: space-between; align-items: center; }
+        .modal { display: none; position: fixed; z-index: 50; inset: 0; background-color: rgba(11, 17, 32, 0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; animation: fadeIn 0.3s ease; }
+        html.light .modal { background-color: rgba(226, 232, 240, 0.7); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .icon { width: 1.25rem; height: 1.25rem; }
+         .toast { position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); background-color: var(--card-bg); color: var(--text); padding: 12px 24px; border-radius: 8px; border-left: 4px solid; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.5s ease-in-out; z-index: 1000; }
+        .toast.show { bottom: 20px; }
+        .toast.success { border-color: var(--primary); } .toast.info { border-color: var(--accent); } .toast.error { border-color: var(--danger); }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="login-screen" class="modal" style="display: flex;">
+        <div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-sm p-8 text-center">
+            <h2 class="text-2xl font-bold mb-2">Acesso Restrito</h2>
+            <p class="text-secondary mb-6">Insira a senha para acessar o sistema.</p>
+            <form id="login-form"><input type="password" id="app-password" class="form-input w-full rounded-lg p-3 mb-4 text-center" required><button type="submit" class="btn btn-primary w-full py-3">Acessar</button></form>
+            <button id="back-to-index-login" class="block w-full text-sm text-slate-500 hover:text-slate-300 mt-4 bg-transparent border-none">Voltar para a página principal</button>
+        </div>
+    </div>
+
+    <div class="container mx-auto hidden max-w-7xl" id="dashboard-content">
+        <header class="relative text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Dashboard Administrativo</h1>
+            <p class="text-lg text-secondary mt-2">Análise de despesas e custos</p>
+            <div class="absolute top-0 left-0 flex items-center gap-2">
+                <button id="back-to-index-dash" class="btn btn-secondary text-sm"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path></svg><span>Voltar</span></button>
+            </div>
+             <div class="absolute top-0 right-0 flex items-center gap-2">
+                <button id="theme-toggle" class="btn btn-secondary text-sm" title="Alternar Tema">
+                    <svg id="theme-icon-sun" class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="theme-icon-moon" class="icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+            </div>
+        </header>
+        
+        <div class="card p-4 rounded-xl shadow-lg mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                <div><label class="block text-sm mb-1 text-secondary">Data Início</label><input type="date" id="filter-start-date" class="form-input w-full rounded-lg p-2"></div>
+                <div><label class="block text-sm mb-1 text-secondary">Data Fim</label><input type="date" id="filter-end-date" class="form-input w-full rounded-lg p-2"></div>
+                <div class="flex flex-col md:flex-row gap-2 col-span-1 md:col-span-2 lg:col-span-1">
+                    <button id="update-dashboard-btn" class="w-full btn btn-primary py-2.5">Atualizar</button>
+                    <button id="excel-dashboard-btn" class="w-full btn btn-secondary py-2.5">Excel</button>
+                    <button id="pdf-dashboard-btn" class="w-full btn btn-secondary py-2.5">PDF</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="kpi-container"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="card p-6 rounded-xl lg:col-span-1" id="gastos-grupo-container"></div>
+            <div class="card p-6 rounded-xl lg:col-span-1" id="gastos-subgrupo-container"></div>
+            <div class="card p-6 rounded-xl lg:col-span-1" id="gastos-fornecedor-container"></div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, doc, getDocs, setDoc, query, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+        // --- INÍCIO DA CONFIGURAÇÃO DO FIREBASE ---
+        const firebaseConfig = {
+          apiKey: "SEU_API_KEY",
+          authDomain: "SEU_AUTH_DOMAIN",
+          projectId: "SEU_PROJECT_ID",
+          storageBucket: "SEU_STORAGE_BUCKET",
+          messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+          appId: "SEU_APP_ID"
+        };
+        // --- FIM DA CONFIGURAÇÃO DO FIREBASE ---
+        
+        const APP_PASSWORD = 'adminpmg2025';
+        const COLLECTIONS = { NOTAS: 'notas', RECIBOS: 'recibos' };
+
+        let db, auth, appId;
+        let notasCol, recibosCol;
+
+        const UI = {
+            loginScreen: document.getElementById('login-screen'), dashboardContent: document.getElementById('dashboard-content'), loginForm: document.getElementById('login-form'),
+            themeToggle: document.getElementById('theme-toggle'), sunIcon: document.getElementById('theme-icon-sun'), moonIcon: document.getElementById('theme-icon-moon'),
+            kpiContainer: document.getElementById('kpi-container'), gastosGrupoContainer: document.getElementById('gastos-grupo-container'),
+            gastosSubgrupoContainer: document.getElementById('gastos-subgrupo-container'), gastosFornecedorContainer: document.getElementById('gastos-fornecedor-container'),
+            filterStartDate: document.getElementById('filter-start-date'), filterEndDate: document.getElementById('filter-end-date'),
+            updateDashboardBtn: document.getElementById('update-dashboard-btn'), excelDashboardBtn: document.getElementById('excel-dashboard-btn'),
+            pdfDashboardBtn: document.getElementById('pdf-dashboard-btn'), backToIndexLogin: document.getElementById('back-to-index-login'),
+            backToIndexDash: document.getElementById('back-to-index-dash'), toast: document.getElementById('toast'),
+        };
+        
+        function showToast(message, type = 'success', duration = 3000) {
+            UI.toast.textContent = message; UI.toast.className = `toast show ${type}`;
+            setTimeout(() => { UI.toast.classList.remove('show'); }, duration);
+        }
+
+        function getCollectionRef(name) { return collection(db, `artifacts/${appId}/public/data/${name}`); }
+        
+        function formatCurrency(value) { return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+        
+        async function updateDashboard() {
+            try {
+                const startDate = UI.filterStartDate.value;
+                const endDate = UI.filterEndDate.value;
+                
+                const [notasSnapshot, recibosSnapshot] = await Promise.all([ getDocs(notasCol), getDocs(recibosCol) ]);
+                let allNotas = notasSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                let allRecibos = recibosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (startDate && endDate) {
+                    allRecibos = allRecibos.filter(r => r.data >= startDate && r.data <= endDate);
+                    const notasIdsFiltradas = new Set(allRecibos.map(r => r.notaId));
+                    allNotas = allNotas.filter(n => notasIdsFiltradas.has(n.id));
+                }
+
+                const totalGasto = allRecibos.reduce((acc, r) => acc + r.valor, 0);
+                const totalNotas = allNotas.length;
+                const totalRecibos = allRecibos.length;
+                const valorMedioRecibo = totalRecibos > 0 ? totalGasto / totalRecibos : 0;
+                
+                renderKPIs({ totalGasto, totalNotas, totalRecibos, valorMedioRecibo });
+                const notaMap = new Map(allNotas.map(n => [n.id, n]));
+                renderAnalysis('Gastos por Grupo', UI.gastosGrupoContainer, aggregateBy(allRecibos, 'grupo'));
+                renderAnalysis('Gastos por Subgrupo', UI.gastosSubgrupoContainer, aggregateBy(allRecibos, 'subgrupo'));
+                const gastosFornecedor = aggregateBy(allRecibos, 'notaId', (id) => notaMap.get(id)?.fornecedor || 'Desconhecido');
+                renderAnalysis('Gastos por Fornecedor', UI.gastosFornecedorContainer, gastosFornecedor);
+
+            } catch(error) {
+                console.error("Erro ao atualizar dashboard:", error);
+                showToast("Não foi possível carregar os dados para o dashboard.", "error");
+            }
+        }
+        
+        function renderKPIs(data) {
+            UI.kpiContainer.innerHTML = `<div class="kpi-card card p-4 rounded-lg"><div class="text-sm text-secondary">Total Gasto</div><div class="text-3xl font-bold">${formatCurrency(data.totalGasto)}</div></div><div class="kpi-card card p-4 rounded-lg"><div class="text-sm text-secondary">Total de Notas</div><div class="text-3xl font-bold">${data.totalNotas}</div></div><div class="kpi-card card p-4 rounded-lg"><div class="text-sm text-secondary">Total de Recibos</div><div class="text-3xl font-bold">${data.totalRecibos}</div></div><div class="kpi-card card p-4 rounded-lg"><div class="text-sm text-secondary">Valor Médio por Recibo</div><div class="text-3xl font-bold">${formatCurrency(data.valorMedioRecibo)}</div></div>`;
+        }
+        
+        function aggregateBy(data, key, keyResolver = null) {
+            const aggregation = data.reduce((acc, item) => {
+                const groupKey = keyResolver ? keyResolver(item[key]) : item[key];
+                if (groupKey) { acc[groupKey] = (acc[groupKey] || 0) + item.valor; }
+                return acc;
+            }, {});
+            return Object.entries(aggregation).sort(([,a],[,b]) => b-a);
+        }
+
+        function renderAnalysis(title, container, data) {
+            container.innerHTML = `<h3 class="analysis-title">${title}</h3>${data.length > 0 ? data.map(([name, value]) => `<div class="accounting-cell py-2"><span class="text-secondary">${name}</span><span class="font-semibold">${formatCurrency(value)}</span></div>`).join('') : '<p class="text-sm text-secondary">Nenhum dado para exibir.</p>'}`;
+        }
+        
+        async function getDashboardDataForExport() {
+            const startDate = UI.filterStartDate.value; const endDate = UI.filterEndDate.value;
+            const [notasSnapshot, recibosSnapshot] = await Promise.all([ getDocs(notasCol), getDocs(recibosCol) ]);
+            let allNotas = notasSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            let allRecibos = recibosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            if (startDate && endDate) {
+                allRecibos = allRecibos.filter(r => r.data >= startDate && r.data <= endDate);
+                const notasIdsFiltradas = new Set(allRecibos.map(r => r.notaId));
+                allNotas = allNotas.filter(n => notasIdsFiltradas.has(n.id));
+            }
+            const notaMap = new Map(allNotas.map(n => [n.id, n]));
+            const totalGasto = allRecibos.reduce((acc, r) => acc + r.valor, 0); const totalNotas = allNotas.length;
+            const totalRecibos = allRecibos.length; const valorMedioRecibo = totalRecibos > 0 ? totalGasto / totalRecibos : 0;
+            const gastosPorGrupo = aggregateBy(allRecibos, 'grupo'); const gastosPorSubgrupo = aggregateBy(allRecibos, 'subgrupo');
+            const gastosPorFornecedor = aggregateBy(allRecibos, 'notaId', (id) => notaMap.get(id)?.fornecedor || 'Desconhecido');
+            return {
+                kpis: [{ 'Métrica': 'Total Gasto', 'Valor': totalGasto }, { 'Métrica': 'Total de Notas', 'Valor': totalNotas }, { 'Métrica': 'Total de Recibos', 'Valor': totalRecibos }, { 'Métrica': 'Valor Médio por Recibo', 'Valor': valorMedioRecibo }],
+                gastosPorGrupo: gastosPorGrupo.map(([k, v]) => ({ 'Grupo': k, 'Valor': v })),
+                gastosPorSubgrupo: gastosPorSubgrupo.map(([k, v]) => ({ 'Subgrupo': k, 'Valor': v })),
+                gastosPorFornecedor: gastosPorFornecedor.map(([k, v]) => ({ 'Fornecedor': k, 'Valor': v })),
+            };
+        }
+
+        async function generateDashboardExcel() {
+            const data = await getDashboardDataForExport();
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(data.kpis), 'KPIs');
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(data.gastosPorGrupo), 'Gastos por Grupo');
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(data.gastosPorSubgrupo), 'Gastos por Subgrupo');
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(data.gastosPorFornecedor), 'Gastos por Fornecedor');
+            XLSX.writeFile(workbook, `relatorio_dashboard_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        async function generateDashboardPDF() {
+            const { jsPDF } = window.jspdf; const doc = new jsPDF();
+            const pdfData = await getDashboardDataForExport();
+            const addTableToPdf = (title, data, startY) => { doc.setFontSize(16); doc.text(title, 14, startY); doc.autoTable({ startY: startY + 5, head: [Object.keys(data[0] || {})], body: data.map(Object.values), theme: 'grid', headStyles: { fillColor: [42, 58, 90] }, }); return doc.autoTable.previous.finalY + 10; };
+            doc.setFontSize(22); doc.text("Relatório Analítico de Gastos", 105, 15, null, null, "center");
+            let finalY = 25;
+            finalY = addTableToPdf("Resumo (KPIs)", pdfData.kpis.map(k => ({...k, Valor: formatCurrency(k.Valor)})), finalY); doc.addPage();
+            finalY = 20; finalY = addTableToPdf("Gastos por Grupo", pdfData.gastosPorGrupo.map(d => ({...d, Valor: formatCurrency(d.Valor)})), finalY); doc.addPage();
+            finalY = 20; finalY = addTableToPdf("Gastos por Subgrupo", pdfData.gastosPorSubgrupo.map(d => ({...d, Valor: formatCurrency(d.Valor)})), finalY); doc.addPage();
+            finalY = 20; addTableToPdf("Gastos por Fornecedor", pdfData.gastosPorFornecedor.map(d => ({...d, Valor: formatCurrency(d.Valor)})), finalY);
+            doc.save(`relatorio_analitico_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+
+        function setupEventListeners() {
+            UI.updateDashboardBtn.addEventListener('click', updateDashboard);
+            UI.excelDashboardBtn.addEventListener('click', generateDashboardExcel);
+            UI.pdfDashboardBtn.addEventListener('click', generateDashboardPDF);
+            UI.backToIndexLogin.addEventListener('click', () => window.location.href = 'index.html');
+            UI.backToIndexDash.addEventListener('click', () => window.location.href = 'index.html');
+        }
+        
+        const applyTheme = (theme) => {
+            if (theme === 'light') { document.documentElement.classList.add('light'); UI.sunIcon.classList.add('hidden'); UI.moonIcon.classList.remove('hidden'); } 
+            else { document.documentElement.classList.remove('light'); UI.sunIcon.classList.remove('hidden'); UI.moonIcon.classList.add('hidden'); }
+        };
+
+        async function main() {
+            try {
+                if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "SEU_API_KEY") {
+                    throw new Error("Configuração do Firebase não foi inserida.");
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app); auth = getAuth(app);
+                appId = firebaseConfig.appId;
+                await signInAnonymously(auth);
+
+                notasCol = getCollectionRef(COLLECTIONS.NOTAS);
+                recibosCol = getCollectionRef(COLLECTIONS.RECIBOS);
+
+                await updateDashboard();
+                setupEventListeners();
+            } catch (error) {
+                console.error("Falha ao inicializar:", error);
+                showToast("Não foi possível carregar o banco de dados.", "error");
+            }
+        }
+        
+        (function () {
+            const savedTheme = localStorage.getItem('theme') || 'dark'; applyTheme(savedTheme);
+            UI.themeToggle.addEventListener('click', () => {
+                const newTheme = document.documentElement.classList.contains('light') ? 'dark' : 'light';
+                localStorage.setItem('theme', newTheme);
+                applyTheme(newTheme);
+            });
+            if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+                UI.loginScreen.style.display = 'flex';
+                UI.dashboardContent.classList.add('hidden');
+            } else {
+                UI.loginScreen.style.display = 'none';
+                UI.dashboardContent.classList.remove('hidden');
+                main();
+            }
+            UI.loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (e.target['app-password'].value === APP_PASSWORD) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    UI.loginScreen.style.display = 'none';
+                    UI.dashboardContent.classList.remove('hidden');
+                    main();
+                } else { showToast("Senha incorreta!", "error"); }
+            });
+        })();
+    </script>
+</body>
+</html>
+

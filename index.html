@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Notas e Recibos v10.0 - Final</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --bg: #0b1120; --card-bg: #172136; --border: #2a3a5a; --text: #e2e8f0; --text-secondary: #94a3b8; 
+            --primary: #22c55e; --primary-hover: #16a34a; --accent: #38bdf8; --danger: #ef4444; --danger-hover: #dc2626;
+            --zebra-stripe: rgba(42, 58, 90, 0.3); --input-bg: var(--border);
+        }
+        html.light {
+            --bg: #f1f5f9; --card-bg: #ffffff; --border: #e2e8f0; --text: #0f172a; --text-secondary: #64748b;
+            --zebra-stripe: #f8fafc; --input-bg: #f8fafc;
+        }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: var(--border); }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: #5a6a82; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); transition: background-color 0.3s, color 0.3s; }
+        .card { background-color: var(--card-bg); border: 1px solid var(--border); transition: all 0.3s ease; }
+        .form-input { background-color: var(--input-bg); border: 1px solid var(--border); color: var(--text); transition: all 0.2s ease-in-out; }
+        .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3); outline: none; }
+        .form-input:disabled { opacity: 0.5; cursor: not-allowed; } .uppercase-input { text-transform: uppercase; }
+        .btn { padding: 0.65rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; border: none; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-primary { background-color: var(--primary); color: white; box-shadow: 0 4px 14px 0 rgba(34, 197, 94, 0.25); } 
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 6px 16px 0 rgba(34, 197, 94, 0.3); }
+        .btn-secondary { background-color: var(--border); color: var(--text); } 
+        .btn-secondary:hover:not(:disabled) { background-color: #475569; }
+        html.light .btn-secondary:hover:not(:disabled) { background-color: #cbd5e1; }
+        .btn-danger { background-color: var(--danger); color: white; } 
+        .btn-danger:hover:not(:disabled) { background-color: var(--danger-hover); }
+        .table-header { background-color: var(--border); }
+        .table-row:hover .table-cell-clickable { background-color: var(--border); }
+        .table-zebra tbody tr:nth-child(odd) { background-color: var(--zebra-stripe); }
+        .modal { display: none; position: fixed; z-index: 50; inset: 0; background-color: rgba(11, 17, 32, 0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; animation: fadeIn 0.3s ease; }
+        html.light .modal { background-color: rgba(226, 232, 240, 0.7); }
+        #confirmation-modal { z-index: 101; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .toast { position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); background-color: var(--card-bg); color: var(--text); padding: 12px 24px; border-radius: 8px; border-left: 4px solid; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.5s ease-in-out; z-index: 1000; }
+        .toast.show { bottom: 20px; }
+        .toast.success { border-color: var(--primary); } .toast.info { border-color: var(--accent); } .toast.error { border-color: var(--danger); }
+        .icon { width: 1.25rem; height: 1.25rem; }
+        .action-btn { background: none; border: none; padding: 0.5rem; cursor: pointer; line-height: 1; border-radius: 99px; transition: background-color 0.2s; }
+        .action-btn:hover { background-color: var(--border); }
+        #autocomplete-list { position: absolute; border: 1px solid var(--border); z-index: 99; top: 100%; left: 0; right: 0; max-height: 150px; overflow-y: auto; }
+        #autocomplete-list div { padding: 10px; cursor: pointer; background-color: var(--card-bg); }
+        #autocomplete-list div:hover { background-color: var(--border); }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="login-screen" class="modal" style="display: flex;">
+        <div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-sm p-8 text-center">
+            <h2 class="text-2xl font-bold mb-2">Bem-vindo</h2>
+            <p class="text-secondary mb-6">Insira a senha para acessar o sistema.</p>
+            <form id="login-form"><input type="password" id="app-password" class="form-input w-full rounded-lg p-3 mb-4 text-center" required><button type="submit" class="btn btn-primary w-full py-3">Acessar</button></form>
+        </div>
+    </div>
+
+    <div class="container mx-auto max-w-7xl hidden" id="main-content">
+        <header class="relative text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Controle de Notas e Recibos</h1>
+            <p class="text-lg text-secondary mt-2">Gestão financeira simplificada</p>
+            <div class="absolute top-0 right-0 flex items-center gap-2">
+                <button id="theme-toggle" class="btn btn-secondary text-sm" title="Alternar Tema">
+                    <svg id="theme-icon-sun" class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="theme-icon-moon" class="icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+                <a href="dashboard.html" class="btn btn-secondary text-sm" title="Acessar Relatórios"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></a>
+                <button id="admin-panel-toggle" class="btn btn-secondary text-sm" title="Painel de Administração"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
+            </div>
+        </header>
+
+        <div class="card p-6 rounded-xl shadow-lg mb-8 max-w-3xl mx-auto">
+            <h2 class="text-2xl font-semibold mb-6 border-b-2 border-slate-700 pb-4 text-emerald-400">Cadastrar Nova Nota Fiscal</h2>
+            <form id="form-nota" class="space-y-4">
+                <fieldset>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label for="nota-numero" class="block text-sm font-medium mb-1 text-secondary">Nº da Nota <span class="text-red-500">*</span></label><input type="text" id="nota-numero" required class="form-input uppercase-input w-full rounded-lg p-2"></div>
+                        <div class="relative">
+                            <label for="nota-fornecedor" class="block text-sm font-medium mb-1 text-secondary">Fornecedor <span class="text-red-500">*</span></label>
+                            <input type="text" id="nota-fornecedor" required class="form-input uppercase-input w-full rounded-lg p-2" autocomplete="off">
+                            <div id="autocomplete-list" class="hidden rounded-b-lg"></div>
+                        </div>
+                        <div><label for="nota-valor" class="block text-sm font-medium mb-1 text-secondary">Valor Total (R$) <span class="text-red-500">*</span></label><input type="number" step="0.01" id="nota-valor" placeholder="Ex: 1500.50" required class="form-input w-full rounded-lg p-2"></div>
+                        <div><label for="nota-data" class="block text-sm font-medium mb-1 text-secondary">Data da Nota <span class="text-red-500">*</span></label><input type="date" id="nota-data" required class="form-input w-full rounded-lg p-2"></div>
+                    </div>
+                    <div><label for="nota-link" class="block text-sm font-medium mb-1 text-secondary">Link da Nota <span class="text-red-500">*</span></label><input type="url" id="nota-link" placeholder="https://docs.google.com/..." required class="form-input w-full rounded-lg p-2"></div>
+                    <button type="submit" class="w-full btn btn-primary py-3 mt-6"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg><span>Salvar Nota</span></button>
+                </fieldset>
+            </form>
+        </div>
+
+        <div class="card p-4 sm:p-6 rounded-xl shadow-lg mb-8">
+            <div id="pendentes-header" class="flex justify-between items-center cursor-pointer">
+                <div class="flex items-center gap-3"><h2 class="text-2xl font-semibold">Notas Pendentes</h2><span id="pendentes-count" class="bg-yellow-500 text-yellow-900 text-sm font-bold px-3 py-1 rounded-full">0</span></div>
+                <button id="toggle-pendentes-btn" class="btn btn-secondary p-2"><svg id="pendentes-icon" class="icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></button>
+            </div>
+            <div id="pendentes-list" class="mt-4 border-t border-slate-700 pt-4 hidden"></div>
+        </div>
+
+        <div class="card p-4 sm:p-6 rounded-xl shadow-lg">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                <h2 class="text-2xl font-semibold whitespace-nowrap">Histórico de Notas</h2>
+                <div class="relative w-full md:w-auto"><span class="absolute inset-y-0 left-0 flex items-center pl-3"><svg class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none"><path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><input type="text" id="search-input" placeholder="Buscar por fornecedor ou nº..." class="form-input w-full md:w-64 rounded-lg py-2 pl-10 pr-4"></div>
+                <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                    <button id="excel-recibos-btn" class="btn btn-secondary text-sm w-full"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span>Exportar Recibos</span></button>
+                    <button id="excel-notas-btn" class="btn btn-secondary text-sm w-full"><span>Exportar Notas</span></button>
+                </div>
+            </div>
+            <div class="overflow-x-auto"><table class="w-full text-left table-zebra"><thead class="table-header"><tr><th class="p-4">Status</th><th class="p-4">Nº da Nota</th><th class="p-4">Fornecedor</th><th class="p-4">Data</th><th class="p-4">Valor Total</th><th class="p-4">Valor Restante</th><th class="p-4 text-center">Ações</th></tr></thead><tbody id="tabela-notas-body"></tbody></table></div>
+        </div>
+    </div>
+
+    <!-- MODAIS -->
+    <div id="modal" class="modal"><div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-4xl"><div id="modal-body" class="p-6"></div></div></div>
+    <div id="password-modal" class="modal"><div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-sm p-8 text-center"><h3 class="text-lg font-bold mb-4">Acesso Restrito</h3><p class="text-sm text-secondary mb-4">Digite a senha de administrador.</p><form id="password-form"><input type="password" id="admin-password" class="form-input w-full rounded-lg p-2 mb-4"><div class="flex justify-end gap-2"><button type="button" id="cancel-password" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Entrar</button></div></form></div></div>
+    <div id="confirmation-modal" class="modal"><div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-sm p-8"><h3 class="text-xl font-bold mb-2 text-center">Confirmar Ação</h3><p id="confirmation-message" class="text-secondary mb-6 text-center"></p><div class="flex justify-center gap-4"><button id="cancel-confirmation" class="btn btn-secondary w-full">Cancelar</button><button id="confirm-action" class="btn btn-danger w-full">Confirmar</button></div></div></div>
+    
+    <div id="admin-modal" class="modal">
+        <div class="modal-content card rounded-xl shadow-2xl w-11/12 max-w-5xl p-6">
+            <h2 class="text-2xl font-semibold mb-6 border-b-2 border-slate-700 pb-4 text-cyan-400">Painel de Administração</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+                <div>
+                    <h3 class="text-lg font-bold mb-4">Fornecedores</h3>
+                    <form id="form-add-fornecedor" class="flex gap-2 mb-4"><input type="text" id="new-fornecedor-name" placeholder="Novo fornecedor" class="form-input uppercase-input w-full rounded-lg p-2" required><button type="submit" class="btn btn-primary">Adicionar</button></form>
+                    <div id="fornecedores-list-admin" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold mb-4">Grupos</h3>
+                    <form id="form-add-grupo" class="flex gap-2 mb-4"><input type="text" id="new-grupo-name" placeholder="Novo grupo" class="form-input uppercase-input w-full rounded-lg p-2" required><button type="submit" class="btn btn-primary">Adicionar</button></form>
+                    <div id="grupos-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold mb-4">Subgrupos</h3>
+                    <div class="mb-4"><label for="admin-select-grupo" class="block text-sm font-medium mb-1 text-secondary">Selecione um Grupo</label><select id="admin-select-grupo" class="form-input w-full rounded-lg p-2"></select></div>
+                    <form id="form-add-subgrupo" class="flex gap-2 mb-4"><input type="text" id="new-subgrupo-name" placeholder="Novo subgrupo" class="form-input uppercase-input w-full rounded-lg p-2" required><button type="submit" class="btn btn-primary" id="add-subgrupo-btn">Adicionar</button></form>
+                    <div id="subgrupos-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+            <div class="flex justify-end border-t border-slate-700 pt-4"><button id="close-admin-modal" class="btn btn-primary">Concluído</button></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, doc, getDocs, addDoc, setDoc, deleteDoc, query, where, onSnapshot, writeBatch, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        
+        // --- INÍCIO DA CONFIGURAÇÃO DO FIREBASE ---
+        // COLE A CONFIGURAÇÃO DO SEU NOVO PROJETO FIREBASE AQUI
+        const firebaseConfig = {
+          apiKey: "SEU_API_KEY",
+          authDomain: "SEU_AUTH_DOMAIN",
+          projectId: "SEU_PROJECT_ID",
+          storageBucket: "SEU_STORAGE_BUCKET",
+          messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+          appId: "SEU_APP_ID"
+        };
+        // --- FIM DA CONFIGURAÇÃO DO FIREBASE ---
+
+        const APP_PASSWORD = 'adminpmg2025', ADMIN_PASSWORD = 'adminpmg2025';
+        const COLLECTIONS = { NOTAS: 'notas', RECIBOS: 'recibos', GRUPOS: 'grupos', SUBGRUPOS: 'subgrupos', FORNECEDORES: 'fornecedores' };
+        
+        let db, auth, appId;
+        let notasCol, recibosCol, gruposCol, subgruposCol, fornecedoresCol;
+        let notasCache = [], recibosCache = [], gruposCache = [], fornecedoresCache = [];
+
+        const UI = {
+            loginScreen: document.getElementById('login-screen'), mainContent: document.getElementById('main-content'), loginForm: document.getElementById('login-form'),
+            themeToggle: document.getElementById('theme-toggle'), sunIcon: document.getElementById('theme-icon-sun'), moonIcon: document.getElementById('theme-icon-moon'),
+            formNota: document.getElementById('form-nota'), tabelaNotasBody: document.getElementById('tabela-notas-body'),
+            modal: document.getElementById('modal'), modalBody: document.getElementById('modal-body'), toast: document.getElementById('toast'),
+            searchInput: document.getElementById('search-input'), excelNotasBtn: document.getElementById('excel-notas-btn'), excelRecibosBtn: document.getElementById('excel-recibos-btn'),
+            adminPanelToggle: document.getElementById('admin-panel-toggle'), passwordModal: document.getElementById('password-modal'), passwordForm: document.getElementById('password-form'),
+            cancelPasswordBtn: document.getElementById('cancel-password'), confirmationModal: document.getElementById('confirmation-modal'), confirmationMessage: document.getElementById('confirmation-message'),
+            cancelConfirmationBtn: document.getElementById('cancel-confirmation'), confirmActionBtn: document.getElementById('confirm-action'),
+            adminModal: document.getElementById('admin-modal'), closeAdminModalBtn: document.getElementById('close-admin-modal'),
+            formAddGrupo: document.getElementById('form-add-grupo'), newGrupoNameInput: document.getElementById('new-grupo-name'), gruposList: document.getElementById('grupos-list'),
+            adminSelectGrupo: document.getElementById('admin-select-grupo'), formAddSubgrupo: document.getElementById('form-add-subgrupo'),
+            newSubgrupoNameInput: document.getElementById('new-subgrupo-name'), subgruposList: document.getElementById('subgrupos-list'),
+            addSubgrupoBtn: document.getElementById('add-subgrupo-btn'),
+            formAddFornecedor: document.getElementById('form-add-fornecedor'), newFornecedorNameInput: document.getElementById('new-fornecedor-name'), fornecedoresListAdmin: document.getElementById('fornecedores-list-admin'),
+            pendentesHeader: document.getElementById('pendentes-header'), pendentesList: document.getElementById('pendentes-list'),
+            pendentesIcon: document.getElementById('pendentes-icon'), pendentesCount: document.getElementById('pendentes-count'),
+            notaFornecedorInput: document.getElementById('nota-fornecedor'), autocompleteList: document.getElementById('autocomplete-list'),
+        };
+
+        function showToast(message, type = 'success', duration = 3000) {
+            UI.toast.textContent = message; UI.toast.className = `toast show ${type}`;
+            setTimeout(() => { UI.toast.classList.remove('show'); }, duration);
+        }
+
+        function showConfirmation(message, onConfirm) {
+            UI.confirmationMessage.textContent = message; UI.confirmationModal.style.display = 'flex';
+            const confirmHandler = () => { onConfirm(); hideConfirmation(); };
+            const cancelHandler = () => hideConfirmation();
+            const hideConfirmation = () => { UI.confirmationModal.style.display = 'none'; UI.confirmActionBtn.removeEventListener('click', confirmHandler); UI.cancelConfirmationBtn.removeEventListener('click', cancelHandler); };
+            UI.confirmActionBtn.addEventListener('click', confirmHandler, { once: true });
+            UI.cancelConfirmationBtn.addEventListener('click', cancelHandler, { once: true });
+        }
+        
+        function getCollectionRef(name) { return collection(db, `artifacts/${appId}/public/data/${name}`); }
+
+        function renderAllContent(filterText = '') {
+            renderTabelaNotas(filterText);
+            renderPendentesList();
+        }
+
+        function renderTabelaNotas(filterText = '') {
+            let notasFiltradas = notasCache;
+            if (filterText) {
+                const lower = filterText.toUpperCase();
+                notasFiltradas = notasCache.filter(n => n.fornecedor.includes(lower) || n.numero.includes(lower));
+            }
+            if (notasFiltradas.length === 0) { UI.tabelaNotasBody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-secondary">Nenhuma nota fiscal encontrada.</td></tr>'; return; }
+            const rowsHtml = notasFiltradas.map(nota => {
+                const recibosDaNota = recibosCache.filter(r => r.notaId === nota.id);
+                const valorRestante = nota.valor - recibosDaNota.reduce((acc, r) => acc + r.valor, 0);
+                const statusText = valorRestante <= 0.001 ? 'Batido' : 'Pendente';
+                const statusBadgeClass = valorRestante <= 0.001 ? 'bg-green-500 text-green-100' : 'bg-yellow-500 text-yellow-100';
+                return `<tr class="table-row" data-nota-id="${nota.id}"><td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeClass}">${statusText}</span></td><td class="p-4 table-cell-clickable cursor-pointer">${nota.numero}</td><td class="p-4 table-cell-clickable cursor-pointer">${nota.fornecedor}</td><td class="p-4 table-cell-clickable cursor-pointer">${new Date(nota.data).toLocaleDateString('pt-BR', {timeZone: 'utc'})}</td><td class="p-4 table-cell-clickable cursor-pointer">R$ ${nota.valor.toFixed(2)}</td><td class="p-4 table-cell-clickable cursor-pointer font-bold ${valorRestante <= 0.001 ? 'text-green-400' : 'text-yellow-400'}">R$ ${valorRestante.toFixed(2)}</td><td class="p-4 text-center flex justify-center items-center gap-2"><a href="${nota.link}" target="_blank" class="action-btn" title="Abrir Link da Nota"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg></a><button class="action-btn delete-nota-btn" data-nota-id="${nota.id}" title="Excluir Nota"><svg class="icon text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td></tr>`;
+            });
+            UI.tabelaNotasBody.innerHTML = rowsHtml.join('');
+        }
+        
+        function renderPendentesList() {
+            const notasPendentes = notasCache.filter(nota => {
+                const recibosDaNota = recibosCache.filter(r => r.notaId === nota.id);
+                const valorRestante = nota.valor - recibosDaNota.reduce((acc, r) => acc + r.valor, 0);
+                return valorRestante > 0.001;
+            }).sort((a, b) => new Date(a.data) - new Date(b.data));
+            UI.pendentesCount.textContent = notasPendentes.length;
+            if (notasPendentes.length === 0) { UI.pendentesList.innerHTML = '<p class="text-secondary text-center">Nenhuma nota pendente.</p>'; } 
+            else { UI.pendentesList.innerHTML = `<table class="w-full text-left"><thead class="text-xs text-secondary uppercase"><tr><th class="p-2">Nº da Nota</th><th class="p-2">Fornecedor</th><th class="p-2">Valor Restante</th></tr></thead><tbody>${notasPendentes.map(nota => { const recibosDaNota = recibosCache.filter(r => r.notaId === nota.id); const valorRestante = nota.valor - recibosDaNota.reduce((acc, r) => acc + r.valor, 0); return `<tr class="border-b border-slate-700"><td class="p-2">${nota.numero}</td><td class="p-2">${nota.fornecedor}</td><td class="p-2 font-bold text-yellow-400">R$ ${valorRestante.toFixed(2)}</td></tr>`; }).join('')}</tbody></table>`; }
+        }
+
+        function openNotaModal(notaId) {
+            const nota = notasCache.find(n => n.id === notaId);
+            const recibos = recibosCache.filter(r => r.notaId === notaId);
+            const valorRestante = nota.valor - recibos.reduce((acc, r) => acc + r.valor, 0);
+            
+            UI.modalBody.innerHTML = `<div class="flex justify-between items-center mb-4"><h2 class="text-2xl font-bold text-accent">Detalhes da Nota #${nota.numero}</h2><button id="close-modal" class="p-2 rounded-full hover:bg-slate-700 text-2xl leading-none">&times;</button></div><p><strong>Fornecedor:</strong> ${nota.fornecedor}</p><p><strong>Valor Total:</strong> R$ ${nota.valor.toFixed(2)}</p><p><strong>Valor Restante:</strong> <span class="font-bold ${valorRestante <= 0.001 ? 'text-green-400' : 'text-yellow-400'}">R$ ${valorRestante.toFixed(2)}</span></p><div class="my-4 border-t border-slate-700 pt-4"><h3 class="text-xl font-semibold text-slate-300 mb-4">Lançar Novo Recibo</h3><form id="form-recibo-modal" class="space-y-4" data-nota-id="${notaId}"><fieldset><div class="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label class="block text-sm mb-1 text-secondary">Valor (R$)</label><input type="number" step="0.01" id="recibo-valor-modal" required class="form-input w-full p-2 rounded-lg"></div><div><label class="block text-sm mb-1 text-secondary">Nº do Recibo</label><input type="text" id="recibo-numero-modal" required class="form-input uppercase-input w-full p-2 rounded-lg"></div><div><label class="block text-sm mb-1 text-secondary">Data</label><input type="date" id="recibo-data-modal" value="${new Date().toISOString().split('T')[0]}" required class="form-input w-full p-2 rounded-lg"></div></div><div><label class="block text-sm mb-1 text-secondary">Descrição</label><textarea id="recibo-descricao-modal" rows="2" class="form-input uppercase-input w-full p-2 rounded-lg"></textarea></div><div><label class="block text-sm mb-1 text-secondary">Link do Recibo</label><input type="url" id="recibo-link-modal" placeholder="https://..." class="form-input w-full p-2 rounded-lg"></div><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm mb-1 text-secondary">Grupo</label><select id="recibo-grupo-modal" required class="form-input w-full p-2 rounded-lg"><option value="">Selecione...</option>${gruposCache.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}</select></div><div><label class="block text-sm mb-1 text-secondary">Subgrupo</label><select id="recibo-subgrupo-modal" required class="form-input w-full p-2 rounded-lg" disabled><option value="">Selecione um grupo</option></select></div></div><button type="submit" class="w-full btn btn-primary py-2 mt-2">Adicionar Recibo</button></fieldset></form></div><div class="my-4 border-t border-slate-700 pt-4"><h3 class="text-xl font-semibold text-slate-300 mb-2">Recibos Vinculados</h3><div id="recibos-list-modal"></div></div>`;
+            renderRecibosInModal(notaId);
+            UI.modal.style.display = 'flex';
+        }
+
+        function renderRecibosInModal(notaId) {
+            const container = document.getElementById('recibos-list-modal');
+            const recibos = recibosCache.filter(r => r.notaId === notaId);
+            if (recibos.length === 0) { container.innerHTML = '<p class="text-secondary">Nenhum recibo lançado.</p>'; return; }
+            container.innerHTML = `<table class="w-full text-sm text-left mt-2"><thead class="text-xs text-secondary uppercase bg-slate-700"><tr><th class="p-2">Nº Recibo</th><th class="p-2">Data</th><th class="p-2">Valor</th><th class="p-2">Descrição</th><th class="p-2">Link</th><th class="p-2 text-right">Ação</th></tr></thead><tbody>${recibos.map(r => `<tr class="border-b border-slate-700"><td class="p-2">${r.numeroRecibo || 'N/A'}</td><td class="p-2">${new Date(r.data).toLocaleDateString('pt-BR', {timeZone: 'utc'})}</td><td class="p-2">R$ ${r.valor.toFixed(2)}</td><td class="p-2">${r.descricao || ''}</td><td class="p-2">${r.link ? `<a href="${r.link}" target="_blank" class="text-cyan-400 hover:underline">Abrir</a>` : ''}</td><td class="p-2 text-right"><button class="action-btn delete-recibo-btn" data-recibo-id="${r.id}" data-nota-id="${r.notaId}" title="Excluir Recibo"><svg class="icon text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td></tr>`).join('')}</tbody></table>`;
+        }
+
+        function renderFornecedoresAdmin() { UI.fornecedoresListAdmin.innerHTML = fornecedoresCache.map(f => `<div class="flex justify-between items-center p-2 rounded-lg bg-slate-700"><span>${f.name}</span><button class="action-btn delete-fornecedor-btn" data-id="${f.id}" title="Excluir"><svg class="icon text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div>`).join('') || '<p class="text-sm text-secondary">Nenhum fornecedor.</p>'; }
+        function renderGruposAdmin() {
+            UI.gruposList.innerHTML = gruposCache.map(g => `<div class="flex justify-between items-center p-2 rounded-lg bg-slate-700"><span>${g.name}</span><button class="action-btn delete-grupo-btn" data-id="${g.id}" title="Excluir"><svg class="icon text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div>`).join('') || '<p class="text-sm text-secondary">Nenhum grupo.</p>';
+            UI.adminSelectGrupo.innerHTML = '<option value="">Selecione...</option>' + gruposCache.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+        }
+        function renderSubgruposAdmin(subgruposDoGrupo) { UI.subgruposList.innerHTML = subgruposDoGrupo.map(sg => `<div class="flex justify-between items-center p-2 rounded-lg bg-slate-700"><span>${sg.name}</span><button class="action-btn delete-subgrupo-btn" data-id="${sg.id}" title="Excluir"><svg class="icon text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div>`).join('') || '<p class="text-sm text-secondary">Nenhum subgrupo.</p>'; }
+        
+        async function getFilteredDataForExport() {
+            const filterText = UI.searchInput.value.toUpperCase();
+            let notas = filterText ? notasCache.filter(n => n.fornecedor.includes(filterText) || n.numero.includes(filterText)) : notasCache;
+            const data = [];
+            for (const nota of notas) {
+                const recibos = recibosCache.filter(r => r.notaId === nota.id);
+                const valorRestante = nota.valor - recibos.reduce((acc, r) => acc + r.valor, 0);
+                data.push({ ...nota, valorRestante });
+            }
+            return { notas: data, recibos: recibosCache };
+        }
+
+        async function exportNotasToExcel() {
+            const { notas } = await getFilteredDataForExport();
+            if (notas.length === 0) { showToast('Nenhuma nota para exportar.', 'error'); return; }
+            const worksheetData = notas.map(n => ({ 'Nº da Nota': n.numero, 'Fornecedor': n.fornecedor, 'Data': new Date(n.data).toLocaleDateString('pt-BR', {timeZone: 'utc'}), 'Valor Total': n.valor, 'Valor Restante': n.valorRestante, 'Link': n.link }));
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Notas');
+            worksheet['!cols'] = [ { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 40 } ];
+            XLSX.writeFile(workbook, `relatorio_notas_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        async function exportRecibosToExcel() {
+            const { recibos } = await getFilteredDataForExport();
+            if (recibos.length === 0) { showToast('Nenhum recibo para exportar.', 'error'); return; }
+            const notaMap = new Map(notasCache.map(n => [n.id, n]));
+            const worksheetData = recibos.map(r => {
+                const nota = notaMap.get(r.notaId);
+                return { 'Nº da Nota': nota?.numero, 'Fornecedor': nota?.fornecedor, 'Data do Recibo': new Date(r.data).toLocaleDateString('pt-BR', {timeZone: 'utc'}), 'Nº do Recibo': r.numeroRecibo, 'Valor (R$)': r.valor, 'Grupo': r.grupo, 'Subgrupo': r.subgrupo, 'Descrição': r.descricao, 'Link': r.link };
+            });
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Recibos');
+            worksheet['!cols'] = [ { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 40 }, { wch: 40 } ];
+            XLSX.writeFile(workbook, `relatorio_recibos_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function setupEventListeners() {
+            UI.formNota.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const fornecedorValor = form['nota-fornecedor'].value.toUpperCase();
+                const isValidFornecedor = fornecedoresCache.some(f => f.name === fornecedorValor);
+                if (!isValidFornecedor) { showToast('Fornecedor inválido. Cadastre no painel de administração.', 'error'); return; }
+                const novaNota = { numero: form['nota-numero'].value.toUpperCase(), fornecedor: fornecedorValor, valor: parseFloat(form['nota-valor'].value), data: form['nota-data'].value, link: form['nota-link'].value };
+                await addDoc(notasCol, novaNota);
+                showToast('Nota fiscal salva com sucesso!');
+                form.reset();
+                form['nota-data'].value = new Date().toISOString().split('T')[0];
+            });
+
+            UI.tabelaNotasBody.addEventListener('click', async e => {
+                const target = e.target;
+                const row = target.closest('tr');
+                if (!row) return;
+                const notaId = row.dataset.notaId;
+                if (target.closest('.delete-nota-btn')) {
+                    showConfirmation('Excluir esta nota também excluirá todos os recibos associados. Continuar?', async () => {
+                        const q = query(recibosCol, where("notaId", "==", notaId));
+                        const querySnapshot = await getDocs(q);
+                        const batch = writeBatch(db);
+                        querySnapshot.forEach(doc => batch.delete(doc.ref));
+                        batch.delete(doc(db, notasCol.path, notaId));
+                        await batch.commit();
+                        showToast('Nota e recibos excluídos com sucesso!');
+                    });
+                } else if (target.closest('.table-cell-clickable')) {
+                    openNotaModal(notaId);
+                }
+            });
+
+            UI.searchInput.addEventListener('input', (e) => renderAllContent(e.target.value));
+
+            UI.modal.addEventListener('click', async e => {
+                const target = e.target;
+                if (target.id === 'close-modal' || target.closest('#close-modal')) UI.modal.style.display = 'none';
+                if (target.closest('.delete-recibo-btn')) {
+                    const reciboId = target.closest('.delete-recibo-btn').dataset.reciboId;
+                    showConfirmation('Tem certeza que deseja excluir este recibo?', async () => {
+                        await deleteDoc(doc(db, recibosCol.path, reciboId));
+                        showToast('Recibo excluído com sucesso!');
+                    });
+                }
+            });
+            
+            UI.modal.addEventListener('change', async e => {
+                if (e.target.id === 'recibo-grupo-modal') {
+                    const grupoId = e.target.value;
+                    const subgrupoSelect = document.getElementById('recibo-subgrupo-modal');
+                    if (!grupoId) { subgrupoSelect.innerHTML = '<option value="">Selecione um grupo</option>'; subgrupoSelect.disabled = true; return; }
+                    const q = query(subgruposCol, where("groupId", "==", grupoId));
+                    const querySnapshot = await getDocs(q);
+                    const subgrupos = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    subgrupoSelect.innerHTML = '<option value="">Selecione</option>' + subgrupos.map(sg => `<option value="${sg.id}">${sg.name}</option>`).join('');
+                    subgrupoSelect.disabled = false;
+                }
+            });
+            
+            UI.modal.addEventListener('submit', async e => {
+                if (e.target.id === 'form-recibo-modal') {
+                    e.preventDefault();
+                    const form = e.target;
+                    const notaId = form.dataset.notaId;
+                    const valorNovoRecibo = parseFloat(form.querySelector('#recibo-valor-modal').value);
+                    const nota = notasCache.find(n => n.id === notaId);
+                    const valorPago = recibosCache.filter(r => r.notaId === notaId).reduce((acc, r) => acc + r.valor, 0);
+                    if (valorPago + valorNovoRecibo > nota.valor + 0.01) { showToast("A soma dos recibos não pode ultrapassar o valor total da nota.", "error"); return; }
+                    const grupoSelect = form.querySelector('#recibo-grupo-modal'), subgrupoSelect = form.querySelector('#recibo-subgrupo-modal');
+                    const novoRecibo = { notaId, valor: valorNovoRecibo, numeroRecibo: form.querySelector('#recibo-numero-modal').value.toUpperCase(), descricao: form.querySelector('#recibo-descricao-modal').value.toUpperCase(), link: form.querySelector('#recibo-link-modal').value, data: form.querySelector('#recibo-data-modal').value, groupId: grupoSelect.value, grupo: grupoSelect.options[grupoSelect.selectedIndex].text, subgrupoId: subgrupoSelect.value, subgrupo: subgrupoSelect.options[subgrupoSelect.selectedIndex].text };
+                    await addDoc(recibosCol, novoRecibo);
+                    showToast('Recibo adicionado com sucesso!');
+                    openNotaModal(notaId);
+                }
+            });
+
+            UI.adminPanelToggle.addEventListener('click', () => { UI.passwordModal.style.display = 'flex' });
+            UI.cancelPasswordBtn.addEventListener('click', () => UI.passwordModal.style.display = 'none');
+            UI.passwordForm.addEventListener('submit', e => {
+                e.preventDefault();
+                if (e.target['admin-password'].value === ADMIN_PASSWORD) {
+                    UI.passwordModal.style.display = 'none'; e.target['admin-password'].value = '';
+                    UI.adminModal.style.display = 'flex';
+                } else { showToast('Senha incorreta!', 'error'); }
+            });
+
+            UI.closeAdminModalBtn.addEventListener('click', () => { UI.adminModal.style.display = 'none' });
+            UI.formAddFornecedor.addEventListener('submit', async (e) => { e.preventDefault(); const name = UI.newFornecedorNameInput.value.toUpperCase(); if (name) { await addDoc(fornecedoresCol, { name }); UI.newFornecedorNameInput.value = ''; } });
+            UI.formAddGrupo.addEventListener('submit', async (e) => { e.preventDefault(); const name = UI.newGrupoNameInput.value.toUpperCase(); if (name) { await addDoc(gruposCol, { name }); UI.newGrupoNameInput.value = ''; } });
+            
+            UI.adminSelectGrupo.addEventListener('change', async e => {
+                const groupId = e.target.value;
+                UI.newSubgrupoNameInput.disabled = !groupId; UI.addSubgrupoBtn.disabled = !groupId;
+                UI.newSubgrupoNameInput.placeholder = groupId ? 'Nome do novo subgrupo' : 'Selecione um grupo';
+                renderSubgruposAdmin([]);
+                if (groupId) {
+                    onSnapshot(query(subgruposCol, where("groupId", "==", groupId)), (snapshot) => {
+                        const subgruposDoGrupo = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        renderSubgruposAdmin(subgruposDoGrupo);
+                    });
+                }
+            });
+
+            UI.formAddSubgrupo.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = UI.newSubgrupoNameInput.value.toUpperCase(); const groupId = UI.adminSelectGrupo.value;
+                if (name && groupId) { await addDoc(subgruposCol, { name, groupId }); UI.newSubgrupoNameInput.value = ''; } 
+                else { showToast('Selecione um grupo e digite um nome.', 'error'); }
+            });
+
+            UI.adminModal.addEventListener('click', async e => {
+                const target = e.target;
+                if (target.closest('.delete-fornecedor-btn')) {
+                    const id = target.closest('.delete-fornecedor-btn').dataset.id;
+                    showConfirmation('Tem certeza?', async () => { await deleteDoc(doc(db, fornecedoresCol.path, id)); showToast('Fornecedor excluído.'); });
+                } else if (target.closest('.delete-grupo-btn')) {
+                    const id = target.closest('.delete-grupo-btn').dataset.id;
+                    showConfirmation('Excluir este grupo também excluirá os subgrupos associados. Continuar?', async () => {
+                        const q = query(subgruposCol, where("groupId", "==", id));
+                        const querySnapshot = await getDocs(q);
+                        const batch = writeBatch(db);
+                        querySnapshot.forEach(doc => batch.delete(doc.ref));
+                        batch.delete(doc(db, gruposCol.path, id));
+                        await batch.commit();
+                        showToast('Grupo e subgrupos excluídos.');
+                    });
+                } else if (target.closest('.delete-subgrupo-btn')) {
+                    const id = target.closest('.delete-subgrupo-btn').dataset.id;
+                    showConfirmation('Tem certeza?', async () => { await deleteDoc(doc(db, subgruposCol.path, id)); showToast('Subgrupo excluído.'); });
+                }
+            });
+
+            UI.togglePendentesBtn.addEventListener('click', () => {
+                UI.pendentesList.classList.toggle('hidden');
+                const isHidden = UI.pendentesList.classList.contains('hidden');
+                UI.pendentesIcon.innerHTML = isHidden ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>';
+            });
+            
+            UI.excelNotasBtn.addEventListener('click', exportNotasToExcel);
+            UI.excelRecibosBtn.addEventListener('click', exportRecibosToExcel);
+            
+            UI.notaFornecedorInput.addEventListener('input', () => {
+                const value = UI.notaFornecedorInput.value.toUpperCase();
+                if (value === '') { UI.autocompleteList.classList.add('hidden'); return; }
+                const filtered = fornecedoresCache.filter(f => f.name.includes(value));
+                if (filtered.length > 0) { UI.autocompleteList.innerHTML = filtered.map(f => `<div>${f.name}</div>`).join(''); UI.autocompleteList.classList.remove('hidden'); } 
+                else { UI.autocompleteList.classList.add('hidden'); }
+            });
+            UI.autocompleteList.addEventListener('click', (e) => { if (e.target.tagName === 'DIV') { UI.notaFornecedorInput.value = e.target.textContent; UI.autocompleteList.classList.add('hidden'); } });
+            document.addEventListener('click', (e) => { if (!UI.notaFornecedorInput.contains(e.target) && !UI.autocompleteList.contains(e.target)) { UI.autocompleteList.classList.add('hidden'); } });
+        }
+        
+        async function main() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                appId = firebaseConfig.appId;
+                await signInAnonymously(auth);
+                                
+                notasCol = getCollectionRef(COLLECTIONS.NOTAS); recibosCol = getCollectionRef(COLLECTIONS.RECIBOS);
+                gruposCol = getCollectionRef(COLLECTIONS.GRUPOS); subgruposCol = getCollectionRef(COLLECTIONS.SUBGRUPOS);
+                fornecedoresCol = getCollectionRef(COLLECTIONS.FORNECEDORES);
+                
+                document.getElementById('nota-data').value = new Date().toISOString().split('T')[0];
+                setupEventListeners();
+
+                onSnapshot(query(notasCol, orderBy("data", "desc")), (snapshot) => { notasCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); renderAllContent(UI.searchInput.value); });
+                onSnapshot(query(recibosCol), (snapshot) => { recibosCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); renderAllContent(UI.searchInput.value); });
+                onSnapshot(query(gruposCol, orderBy("name")), (snapshot) => { gruposCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); renderGruposAdmin(); });
+                onSnapshot(query(fornecedoresCol, orderBy("name")), (snapshot) => { fornecedoresCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); renderFornecedoresAdmin(); });
+                
+            } catch (error) {
+                console.error("Falha ao inicializar:", error);
+                showToast("Não foi possível carregar o banco de dados. Verifique a configuração do Firebase.", "error");
+            }
+        }
+        
+        const applyTheme = (theme) => {
+            if (theme === 'light') { document.documentElement.classList.add('light'); UI.sunIcon.classList.add('hidden'); UI.moonIcon.classList.remove('hidden'); } 
+            else { document.documentElement.classList.remove('light'); UI.sunIcon.classList.remove('hidden'); UI.moonIcon.classList.add('hidden'); }
+        };
+
+        (function () {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            applyTheme(savedTheme);
+
+            UI.themeToggle.addEventListener('click', () => {
+                const newTheme = document.documentElement.classList.contains('light') ? 'dark' : 'light';
+                localStorage.setItem('theme', newTheme);
+                applyTheme(newTheme);
+            });
+            
+            if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+                UI.loginScreen.style.display = 'flex';
+                UI.mainContent.classList.add('hidden');
+            } else {
+                UI.loginScreen.style.display = 'none';
+                UI.mainContent.classList.remove('hidden');
+                main();
+            }
+
+            UI.loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (e.target['app-password'].value === APP_PASSWORD) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    UI.loginScreen.style.display = 'none';
+                    UI.mainContent.classList.remove('hidden');
+                    main();
+                } else { showToast("Senha incorreta!", "error"); }
+            });
+        })();
+    </script>
+</body>
+</html>
+
